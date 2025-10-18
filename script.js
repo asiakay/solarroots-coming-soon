@@ -200,3 +200,12 @@ form.addEventListener('submit', async (event) => {
     setSubmitting(false);
   }
 });
+
+(function populateRememberedEmail() {
+  const rememberedEmail = localStorage.getItem('solarRootsRememberMe');
+
+  if (rememberedEmail) {
+    form.email.value = rememberedEmail;
+    form.remember.checked = true;
+  }
+})();
