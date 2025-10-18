@@ -11,7 +11,7 @@
     <img src="logo.png" alt="Solar Roots Co-op logo" class="logo" />
     <h1>Welcome back to the co-op.</h1>
     <p>Sign in to access your Solar Roots member dashboard.</p>
-    <form id="login-form" class="auth-form" novalidate>
+    <form id="login-form" class="auth-form" novalidate aria-describedby="security-note form-message">
       <div class="field-group">
         <label for="email">Email address</label>
         <input
@@ -48,7 +48,9 @@
         <a class="forgot-password" href="#">Forgot password?</a>
       </div>
       <button type="submit" class="primary-action">Sign In</button>
-      <p class="helper-text">Secure sign-in is powered by end-to-end encryption and never stores your password in plain text.</p>
+      <p id="security-note" class="helper-text">
+        Your credentials are encrypted before transmission and never stored in plain text on this device.
+      </p>
       <p id="form-message" class="form-message" role="status" aria-live="polite"></p>
     </form>
   </div>

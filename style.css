@@ -121,6 +121,11 @@ input[type="password"]:focus {
   user-select: none;
 }
 
+.remember-me.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .remember-me input {
   width: auto;
   margin: 0;
@@ -174,6 +179,10 @@ input[type="password"]:focus {
 
 .form-message.error {
   color: #ffdfdf;
+}
+
+.form-message.pending {
+  color: #ffe8b5;
 }
 
 @media (max-width: 520px) {
