@@ -12,9 +12,32 @@
     <h1>We’re planting something big.</h1>
     <p>Solar Roots Co-op — a solar-powered grocery for the people.</p>
     <p><strong>Launching soon.</strong></p>
-    <form id="subscribe">
-      <input type="email" placeholder="Enter your email" required />
-      <button type="submit">Notify Me</button>
+    <form id="registration-form" class="registration-form" novalidate>
+      <div class="field-group">
+        <label for="email">Email address</label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          required
+        />
+      </div>
+      <div class="field-group">
+        <label for="password">Password</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          placeholder="Create a password"
+          autocomplete="new-password"
+          minlength="8"
+          required
+        />
+      </div>
+      <button type="submit">Join the Co-op Waitlist</button>
+      <p id="form-message" class="form-message" role="status" aria-live="polite"></p>
     </form>
   </div>
   <script src="script.js"></script>
