@@ -1,0 +1,10 @@
+name = "solarroots-coming-soon"
+main = "src/index.ts"
+compatibility_date = "2024-05-01"
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+
+[vars]
+SITE_BASE_URL = "https://solarroots.example.com"
