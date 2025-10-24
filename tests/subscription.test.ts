@@ -49,10 +49,12 @@ class MockD1Database implements D1Database {
   insertedRow: unknown[] | null = null;
   updatedRow: unknown[] | null = null;
   profileInsertedRow: unknown[] | null = null;
-  private selectResult: SubscriptionRecord | null;
+  private subscriptionSelectResult: SubscriptionRecord | null;
+  private profileSelectResult: { password_hash: string | null } | null = null;
+  private passwordColumnExists = true;
 
   constructor(initialSelectResult: SubscriptionRecord | null = null) {
-    this.selectResult = initialSelectResult;
+    this.subscriptionSelectResult = initialSelectResult;
   }
 
   prepare(query: string): D1PreparedStatement {
@@ -60,14 +62,36 @@ class MockD1Database implements D1Database {
   }
 
   setSelectResult(record: SubscriptionRecord | null): void {
-    this.selectResult = record;
+    this.subscriptionSelectResult = record;
+  }
+
+  setProfileSelectResult(record: { password_hash: string | null } | null): void {
+    this.profileSelectResult = record;
+  }
+
+  setPasswordColumnExists(value: boolean): void {
+    this.passwordColumnExists = value;
   }
 
   handleFirst<T>(query: string, bindings: unknown[]): Promise<T | null> {
     this.operations.push({ query, bindings, kind: 'first' });
 
-    if (query.trim().toUpperCase().startsWith('SELECT')) {
-      return Promise.resolve(this.selectResult as T | null);
+    const normalizedQuery = query.trim().toUpperCase();
+
+    if (normalizedQuery.includes("PRAGMA_TABLE_INFO('PROFILES')")) {
+      if (this.passwordColumnExists) {
+        return Promise.resolve({ name: 'password_hash' } as unknown as T);
+      }
+
+      return Promise.resolve(null);
+    }
+
+    if (normalizedQuery.includes('FROM SUBSCRIPTIONS')) {
+      return Promise.resolve(this.subscriptionSelectResult as unknown as T | null);
+    }
+
+    if (normalizedQuery.includes('FROM PROFILES')) {
+      return Promise.resolve(this.profileSelectResult as unknown as T | null);
     }
 
     throw new Error(`Unexpected first() query: ${query}`);
@@ -95,8 +119,23 @@ class MockD1Database implements D1Database {
       return Promise.resolve({} as T);
     }
 
+    if (normalizedQuery.startsWith('ALTER TABLE')) {
+      if (!this.passwordColumnExists) {
+        this.passwordColumnExists = true;
+      }
+      return Promise.resolve({} as T);
+    }
+
     throw new Error(`Unexpected run() query: ${query}`);
   }
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 describe('subscribe handler', () => {
@@ -178,11 +217,12 @@ describe('subscribe handler', () => {
       message: 'Confirmation email sent. Please check your inbox.',
     });
 
-    expect(db.operations.length).toBe(4);
+    expect(db.operations.length).toBe(5);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
     expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[3].query.startsWith('INSERT')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[4].query.startsWith('INSERT')).toBe(true);
 
     expect(db.insertedRow).not.toBeNull();
     if (db.insertedRow) {
@@ -248,10 +288,11 @@ describe('subscribe handler', () => {
       message: 'Email is already confirmed.',
     });
 
-    expect(db.operations.length).toBe(3);
+    expect(db.operations.length).toBe(4);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
     expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
     expect(db.insertedRow).toBeNull();
     expect(db.updatedRow).toBeNull();
     expect(fetchCalls.length).toBe(0);
@@ -285,11 +326,12 @@ describe('confirmation handler', () => {
     expect(response.status).toBe(200);
     expect(body).toContain('Your email has been confirmed');
 
-    expect(db.operations.length).toBe(4);
+    expect(db.operations.length).toBe(5);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
     expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[3].query.startsWith('UPDATE')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[4].query.startsWith('UPDATE')).toBe(true);
 
     expect(db.updatedRow).not.toBeNull();
     if (db.updatedRow) {
@@ -325,10 +367,11 @@ describe('confirmation handler', () => {
     expect(response.status).toBe(400);
     expect(body).toContain('confirmation link is no longer valid');
 
-    expect(db.operations.length).toBe(3);
+    expect(db.operations.length).toBe(4);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
     expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
     expect(db.updatedRow).toBeNull();
   });
 });
@@ -407,7 +450,12 @@ describe('profile handler', () => {
     const request = new Request('https://example.com/api/profile', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com', name: 'Solar Fan', bio: 'Loves sunshine.' }),
+      body: JSON.stringify({
+        email: 'user@example.com',
+        name: 'Solar Fan',
+        password: 'password123',
+        bio: 'Loves sunshine.',
+      }),
     });
 
     const ctx: ExecutionContext = {
@@ -421,10 +469,48 @@ describe('profile handler', () => {
 
     expect(response.status).toBe(404);
     expect(body).toEqual({ success: false, error: 'Email not found in subscriptions.' });
-    expect(db.operations.length).toBe(3);
+    expect(db.operations.length).toBe(4);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
     expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+  });
+
+  it('requires a password when creating a new profile', async () => {
+    const existing: SubscriptionRecord = {
+      email: 'user@example.com',
+      confirmed: 1,
+      confirmation_token: null,
+    };
+    const db = new MockD1Database(existing);
+
+    const request = new Request('https://example.com/api/profile', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'user@example.com',
+        name: 'Solar Fan',
+        bio: 'Loves sunshine.',
+      }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ success: false, error: 'Password is required to create a profile.' });
+    expect(db.operations.length).toBe(5);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[4].query.startsWith('SELECT')).toBe(true);
   });
 
   it('creates or updates a profile for a subscribed user', async () => {
@@ -438,7 +524,12 @@ describe('profile handler', () => {
     const request = new Request('https://example.com/api/profile', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'user@example.com', name: '  Solar Fan  ', bio: ' Harnessing sunlight. ' }),
+      body: JSON.stringify({
+        email: 'user@example.com',
+        name: '  Solar Fan  ',
+        password: 'password123',
+        bio: ' Harnessing sunlight. ',
+      }),
     });
 
     const ctx: ExecutionContext = {
@@ -452,20 +543,122 @@ describe('profile handler', () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual({ success: true, message: 'Profile saved successfully.' });
-    expect(db.operations.length).toBe(4);
+    expect(db.operations.length).toBe(6);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
     expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[3].query.startsWith('INSERT')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[4].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[5].query.startsWith('INSERT')).toBe(true);
 
     expect(db.profileInsertedRow).not.toBeNull();
     if (db.profileInsertedRow) {
-      const [email, name, bio, createdAt, updatedAt] = db.profileInsertedRow;
+      const [email, name, bio, passwordHash, createdAt, updatedAt] = db.profileInsertedRow as [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
       expect(email).toBe('user@example.com');
       expect(name).toBe('Solar Fan');
       expect(bio).toBe('Harnessing sunlight.');
+      expect(passwordHash).toHaveLength(64);
+      expect(passwordHash).not.toBe('password123');
       expect(typeof createdAt).toBe('string');
       expect(typeof updatedAt).toBe('string');
     }
+  });
+});
+
+describe('login handler', () => {
+  it('returns 404 when no profile with a password exists', async () => {
+    const db = new MockD1Database();
+    db.setProfileSelectResult(null);
+
+    const request = new Request('https://example.com/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com', password: 'password123' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({
+      success: false,
+      error: 'We could not find an account with a password for that email. Please create or update your profile first.',
+    });
+    expect(db.operations.length).toBe(4);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+  });
+
+  it('rejects incorrect passwords', async () => {
+    const db = new MockD1Database();
+    const passwordHash = await sha256Hex('password123');
+    db.setProfileSelectResult({ password_hash: passwordHash });
+
+    const request = new Request('https://example.com/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com', password: 'otherpass' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body).toEqual({ success: false, error: 'Incorrect password. Please try again.' });
+    expect(db.operations.length).toBe(4);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+  });
+
+  it('logs in successfully with the correct credentials', async () => {
+    const db = new MockD1Database();
+    const passwordHash = await sha256Hex('password123');
+    db.setProfileSelectResult({ password_hash: passwordHash });
+
+    const request = new Request('https://example.com/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com', password: 'password123' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ success: true, message: 'Login successful.' });
+    expect(db.operations.length).toBe(4);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
   });
 });
