@@ -307,6 +307,39 @@ export default {
       return handleConfirmation(request, env, log);
     }
 
+if (url.pathname === '/api/check' && request.method === 'POST') {
+  const log = getLogger(ctx);
+  const payload = await parseJson(request, log);
+  if (!payload || typeof payload.email !== 'string') {
+    return jsonResponse({ success: false, error: 'Invalid request.' }, 400);
+  }
+
+  const email = payload.email.trim().toLowerCase();
+  if (!isValidEmail(email)) {
+    return jsonResponse({ success: false, error: 'Invalid email address.' }, 400);
+  }
+
+  await ensureSchema(env.DB);
+  const existing = await env.DB
+    .prepare('SELECT email FROM subscriptions WHERE email = ?')
+    .bind(email)
+    .first();
+
+  return jsonResponse(
+    {
+      success: true,
+      exists: !!existing,
+      message: existing
+        ? 'This email is already subscribed.'
+        : 'This email is available.',
+    },
+    200
+  );
+}
+
+
+    
+
     if (url.pathname !== '/api/subscribe') {
       if (env.ASSETS) {
         return env.ASSETS.fetch(request);
