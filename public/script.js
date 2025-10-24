@@ -38,7 +38,7 @@ if (form && message) {
         return;
       }
 
-      setMessage(data.message ?? 'You are all set! Check your inbox for a confirmation email.', 'success');
+      setMessage(data.message ?? 'You are all set! Check your inbox for updates soon.', 'success');
       form.reset();
     } catch (error) {
       console.error('Subscription request failed', error);
