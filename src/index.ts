@@ -343,9 +343,26 @@ export default {
       await ensureSchema(env.DB);
 
       const existing = await env.DB
-        .prepare('SELECT email, confirmed, confirmation_token FROM subscriptions WHERE email = ?')
-        .bind(normalizedEmail)
-        .first<SubscriptionRecord>();
+  .prepare('SELECT email FROM subscriptions WHERE email = ?')
+  .bind(normalizedEmail)
+  .first();
+
+if (existing) {
+  return jsonResponse(
+    { success: false, error: 'This email is already subscribed.' },
+    400
+  );
+}
+
+await env.DB
+  .prepare('INSERT INTO subscriptions (email, created_at) VALUES (?, ?)')
+  .bind(normalizedEmail, new Date().toISOString())
+  .run();
+
+return jsonResponse(
+  { success: true, message: 'Thanks for subscribing!' },
+  200
+);
 
       const now = new Date().toISOString();
       let token = crypto.randomUUID();
