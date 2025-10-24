@@ -6,5 +6,17 @@ compatibility_date = "2024-05-01"
 directory = "public"
 binding = "ASSETS"
 
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+
 [vars]
 SITE_BASE_URL = "https://solarroots.example.com"
