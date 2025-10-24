@@ -19,9 +19,6 @@ export interface Env {
   MAIL_FROM_NAME?: string;
   MAILCHANNELS_DOMAIN?: string;
   MAILCHANNELS_SUBDOMAIN?: string;
-  SENDGRID_API_KEY?: string;
-  SENDGRID_FROM_EMAIL?: string;
-  SENDGRID_FROM_NAME?: string;
   SITE_BASE_URL?: string;
 }
 
@@ -239,11 +236,7 @@ async function sendConfirmationEmail(
   link: string,
   log: (...args: unknown[]) => void
 ): Promise<void> {
-  if (env.SENDGRID_API_KEY) {
-    await sendWithSendGrid(env, recipient, link, log);
-  } else {
-    await sendWithMailChannels(env, recipient, link, log);
-  }
+  await sendWithMailChannels(env, recipient, link, log);
 }
 
 async function sendWithMailChannels(
@@ -291,49 +284,6 @@ async function sendWithMailChannels(
     const errorText = await response.text();
     log('MailChannels error', response.status, errorText);
     throw new Error(`MailChannels request failed with status ${response.status}`);
-  }
-}
-
-async function sendWithSendGrid(
-  env: Env,
-  recipient: string,
-  link: string,
-  log: (...args: unknown[]) => void
-): Promise<void> {
-  const fromEmail = env.SENDGRID_FROM_EMAIL ?? env.MAIL_FROM_EMAIL ?? 'noreply@example.com';
-  const fromName = env.SENDGRID_FROM_NAME ?? env.MAIL_FROM_NAME ?? 'Solar Roots';
-
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${env.SENDGRID_API_KEY}`,
-    },
-    body: JSON.stringify({
-      personalizations: [
-        {
-          to: [{ email: recipient }],
-        },
-      ],
-      from: { email: fromEmail, name: fromName },
-      subject: 'Confirm your Solar Roots subscription',
-      content: [
-        {
-          type: 'text/plain',
-          value: `Thanks for subscribing to Solar Roots! Confirm your email by visiting: ${link}`,
-        },
-        {
-          type: 'text/html',
-          value: `<p>Thanks for subscribing to Solar Roots!</p><p><a href="${link}">Click here to confirm your email address</a>.</p>`,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    log('SendGrid error', response.status, errorText);
-    throw new Error(`SendGrid request failed with status ${response.status}`);
   }
 }
 
