@@ -73,6 +73,29 @@ function isValidEmail(email: string): boolean {
   return emailPattern.test(email);
 }
 
+const encoder = new TextEncoder();
+
+async function hashPassword(password: string): Promise<string> {
+  const data = encoder.encode(password);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  let result = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    result |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+
+  return result === 0;
+}
+
 async function ensureSchema(db: D1Database): Promise<void> {
   await db
     .prepare(
@@ -82,9 +105,17 @@ async function ensureSchema(db: D1Database): Promise<void> {
 
   await db
     .prepare(
-      'CREATE TABLE IF NOT EXISTS profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, bio TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(email) REFERENCES subscriptions(email))'
+      'CREATE TABLE IF NOT EXISTS profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, bio TEXT NOT NULL, password_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(email) REFERENCES subscriptions(email))'
     )
     .run();
+
+  const passwordColumn = await db
+    .prepare("SELECT name FROM pragma_table_info('profiles') WHERE name = 'password_hash'")
+    .first<{ name: string }>();
+
+  if (!passwordColumn) {
+    await db.prepare('ALTER TABLE profiles ADD COLUMN password_hash TEXT').run();
+  }
 }
 
 function buildConfirmationLink(
@@ -346,6 +377,7 @@ async function handleProfile(
 
   const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
   const name = typeof payload.name === 'string' ? payload.name.trim() : '';
+  const password = typeof payload.password === 'string' ? payload.password : '';
   const bio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
 
   if (!isValidEmail(email)) {
@@ -371,18 +403,102 @@ async function handleProfile(
       return jsonResponse({ success: false, error: 'Email not found in subscriptions.' }, 404);
     }
 
-    const now = new Date().toISOString();
-    await env.DB
-      .prepare(
-        'INSERT INTO profiles (email, name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ' +
-          'ON CONFLICT(email) DO UPDATE SET name = excluded.name, bio = excluded.bio, updated_at = excluded.updated_at'
-      )
-      .bind(email, name, bio, now, now)
-      .run();
+    const existingProfile = await env.DB
+      .prepare('SELECT password_hash FROM profiles WHERE email = ?')
+      .bind(email)
+      .first<{ password_hash: string | null }>();
 
-    return jsonResponse({ success: true, message: 'Profile saved successfully.' }, 200);
+    if (!existingProfile && !password) {
+      return jsonResponse({ success: false, error: 'Password is required to create a profile.' }, 400);
+    }
+
+    if (password && password.length < 8) {
+      return jsonResponse({ success: false, error: 'Password must be at least 8 characters long.' }, 400);
+    }
+
+    const passwordHash = password ? await hashPassword(password) : null;
+    const now = new Date().toISOString();
+
+    if (passwordHash) {
+      await env.DB
+        .prepare(
+          'INSERT INTO profiles (email, name, bio, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ' +
+            'ON CONFLICT(email) DO UPDATE SET name = excluded.name, bio = excluded.bio, password_hash = excluded.password_hash, updated_at = excluded.updated_at'
+        )
+        .bind(email, name, bio, passwordHash, now, now)
+        .run();
+    } else {
+      await env.DB
+        .prepare(
+          'INSERT INTO profiles (email, name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ' +
+            'ON CONFLICT(email) DO UPDATE SET name = excluded.name, bio = excluded.bio, updated_at = excluded.updated_at'
+        )
+        .bind(email, name, bio, now, now)
+        .run();
+    }
+
+    const message = existingProfile ? 'Profile updated successfully.' : 'Profile saved successfully.';
+    return jsonResponse({ success: true, message }, 200);
   } catch (error) {
     log('Profile handler failed', error);
+    return jsonResponse({ success: false, error: 'Internal Server Error' }, 500);
+  }
+}
+
+async function handleLogin(
+  request: Request,
+  env: Env,
+  log: (...args: unknown[]) => void
+): Promise<Response> {
+  if (request.method !== 'POST') {
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: { ...CORS_HEADERS, Allow: 'POST,OPTIONS' },
+    });
+  }
+
+  const payload = await parseJson(request, log);
+  if (!payload) {
+    return jsonResponse({ success: false, error: 'Invalid JSON body.' }, 400);
+  }
+
+  const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+  const password = typeof payload.password === 'string' ? payload.password : '';
+
+  if (!isValidEmail(email)) {
+    return jsonResponse({ success: false, error: 'Invalid email address.' }, 400);
+  }
+
+  if (!password) {
+    return jsonResponse({ success: false, error: 'Password is required.' }, 400);
+  }
+
+  try {
+    await ensureSchema(env.DB);
+
+    const profile = await env.DB
+      .prepare('SELECT password_hash FROM profiles WHERE email = ?')
+      .bind(email)
+      .first<{ password_hash: string | null }>();
+
+    if (!profile || !profile.password_hash) {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'We could not find an account with a password for that email. Please create or update your profile first.',
+        },
+        404
+      );
+    }
+
+    const incomingHash = await hashPassword(password);
+    if (!timingSafeEqual(incomingHash, profile.password_hash)) {
+      return jsonResponse({ success: false, error: 'Incorrect password. Please try again.' }, 401);
+    }
+
+    return jsonResponse({ success: true, message: 'Login successful.' }, 200);
+  } catch (error) {
+    log('Login handler failed', error);
     return jsonResponse({ success: false, error: 'Internal Server Error' }, 500);
   }
 }
@@ -472,6 +588,10 @@ export default {
 
     if (url.pathname === '/api/profile') {
       return handleProfile(request, env, log);
+    }
+
+    if (url.pathname === '/api/login') {
+      return handleLogin(request, env, log);
     }
 
     if (url.pathname === '/api/check') {

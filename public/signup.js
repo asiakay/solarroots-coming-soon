@@ -17,7 +17,7 @@ function setSubmitting(isSubmitting) {
   submitButton.textContent = isSubmitting ? 'Saving…' : 'Save my profile';
 }
 
-function validateInputs(email, name, bio) {
+function validateInputs(email, name, password, bio) {
   if (!email) {
     setMessage('Please provide an email address.', 'error');
     return false;
@@ -31,6 +31,16 @@ function validateInputs(email, name, bio) {
 
   if (!name) {
     setMessage('Share your name so we know what to call you.', 'error');
+    return false;
+  }
+
+  if (!password) {
+    setMessage('Create a password so you can log in later.', 'error');
+    return false;
+  }
+
+  if (password.length < 8) {
+    setMessage('Passwords need to be at least 8 characters long.', 'error');
     return false;
   }
 
@@ -49,9 +59,10 @@ if (form && message) {
     const formData = new FormData(form);
     const email = (formData.get('email') ?? '').toString().trim().toLowerCase();
     const name = (formData.get('name') ?? '').toString().trim();
+    const password = (formData.get('password') ?? '').toString();
     const bio = (formData.get('bio') ?? '').toString().trim();
 
-    if (!validateInputs(email, name, bio)) {
+    if (!validateInputs(email, name, password, bio)) {
       return;
     }
 
@@ -62,7 +73,7 @@ if (form && message) {
       const response = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, name, bio }),
+        body: JSON.stringify({ email, name, password, bio }),
       });
 
       const data = await response.json().catch(() => ({}));
