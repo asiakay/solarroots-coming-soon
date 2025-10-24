@@ -79,6 +79,12 @@ async function ensureSchema(db: D1Database): Promise<void> {
       'CREATE TABLE IF NOT EXISTS subscriptions (email TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT, confirmed INTEGER NOT NULL DEFAULT 0, confirmation_token TEXT, token_created_at TEXT)'
     )
     .run();
+
+  await db
+    .prepare(
+      'CREATE TABLE IF NOT EXISTS profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, bio TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(email) REFERENCES subscriptions(email))'
+    )
+    .run();
 }
 
 function buildConfirmationLink(
@@ -294,21 +300,7 @@ function jsonResponse(body: Record<string, unknown>, status: number): Response {
   });
 }
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
-    }
-
-    if (url.pathname === '/confirm') {
-      const log = getLogger(ctx);
-      return handleConfirmation(request, env, log);
-    }
-
-if (url.pathname === '/api/check' && request.method === 'POST') {
-  const log = getLogger(ctx);
+async function handleSubscriptionCheck(request: Request, env: Env, log: (...args: unknown[]) => void): Promise<Response> {
   const payload = await parseJson(request, log);
   if (!payload || typeof payload.email !== 'string') {
     return jsonResponse({ success: false, error: 'Invalid request.' }, 400);
@@ -329,155 +321,185 @@ if (url.pathname === '/api/check' && request.method === 'POST') {
     {
       success: true,
       exists: !!existing,
-      message: existing
-        ? 'This email is already subscribed.'
-        : 'This email is available.',
+      message: existing ? 'This email is already subscribed.' : 'This email is available.',
     },
     200
   );
 }
-    
 
-    if (url.pathname !== '/api/subscribe') {
-      if (env.ASSETS) {
-        return env.ASSETS.fetch(request);
-      }
-
-      return new Response('Not Found', { status: 404 });
-    }
-
-if (url.pathname === '/api/profile' && request.method === 'POST') {
-  const log = getLogger(ctx);
-  const payload = await parseJson(request, log);
-  if (!payload || typeof payload.email !== 'string') {
-    return jsonResponse({ success: false, error: 'Invalid request.' }, 400);
+async function handleProfile(
+  request: Request,
+  env: Env,
+  log: (...args: unknown[]) => void
+): Promise<Response> {
+  if (request.method !== 'POST') {
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: { ...CORS_HEADERS, Allow: 'POST,OPTIONS' },
+    });
   }
 
-  const email = payload.email.trim().toLowerCase();
-  const name = typeof payload.name === 'string' ? payload.name.trim() : null;
-  const bio = typeof payload.bio === 'string' ? payload.bio.trim() : null;
+  const payload = await parseJson(request, log);
+  if (!payload) {
+    return jsonResponse({ success: false, error: 'Invalid JSON body.' }, 400);
+  }
+
+  const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+  const name = typeof payload.name === 'string' ? payload.name.trim() : '';
+  const bio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
 
   if (!isValidEmail(email)) {
     return jsonResponse({ success: false, error: 'Invalid email address.' }, 400);
   }
 
-  await ensureSchema(env.DB);
-  const existing = await env.DB
-    .prepare('SELECT email FROM subscriptions WHERE email = ?')
-    .bind(email)
-    .first();
-
-  if (!existing) {
-    return jsonResponse({ success: false, error: 'Email not found in subscriptions.' }, 404);
+  if (!name) {
+    return jsonResponse({ success: false, error: 'Name is required.' }, 400);
   }
 
-  const now = new Date().toISOString();
+  if (!bio) {
+    return jsonResponse({ success: false, error: 'Bio is required.' }, 400);
+  }
 
-  await env.DB
-    .prepare(
-      'INSERT INTO profiles (email, name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ' +
-      'ON CONFLICT(email) DO UPDATE SET name = excluded.name, bio = excluded.bio, updated_at = excluded.updated_at;'
-    )
-    .bind(email, name, bio, now, now)
-    .run();
+  try {
+    await ensureSchema(env.DB);
+    const existing = await env.DB
+      .prepare('SELECT email FROM subscriptions WHERE email = ?')
+      .bind(email)
+      .first();
 
-  return jsonResponse({ success: true, message: 'Profile saved successfully.' }, 200);
+    if (!existing) {
+      return jsonResponse({ success: false, error: 'Email not found in subscriptions.' }, 404);
+    }
+
+    const now = new Date().toISOString();
+    await env.DB
+      .prepare(
+        'INSERT INTO profiles (email, name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ' +
+          'ON CONFLICT(email) DO UPDATE SET name = excluded.name, bio = excluded.bio, updated_at = excluded.updated_at'
+      )
+      .bind(email, name, bio, now, now)
+      .run();
+
+    return jsonResponse({ success: true, message: 'Profile saved successfully.' }, 200);
+  } catch (error) {
+    log('Profile handler failed', error);
+    return jsonResponse({ success: false, error: 'Internal Server Error' }, 500);
+  }
 }
 
+async function handleSubscribe(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  log: (...args: unknown[]) => void
+): Promise<Response> {
+  try {
+    const payload = await parseJson(request, log);
+    if (!payload) {
+      return jsonResponse({ success: false, error: 'Invalid JSON body.' }, 400);
+    }
 
-    
+    const { email } = payload;
+    if (typeof email !== 'string' || !isValidEmail(email)) {
+      return jsonResponse({ success: false, error: 'A valid email address is required.' }, 400);
+    }
 
-    if (request.method !== 'POST') {
-      return new Response('Method Not Allowed', {
-        status: 405,
-        headers: { ...CORS_HEADERS, Allow: 'POST,OPTIONS' },
-      });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    await ensureSchema(env.DB);
+
+    const existing = await env.DB
+      .prepare('SELECT email, confirmed, confirmation_token FROM subscriptions WHERE email = ?')
+      .bind(normalizedEmail)
+      .first<SubscriptionRecord>();
+
+    const now = new Date().toISOString();
+    let token = crypto.randomUUID();
+
+    if (existing) {
+      if (existing.confirmed) {
+        return jsonResponse({ success: true, message: 'Email is already confirmed.' }, 200);
+      }
+
+      token = existing.confirmation_token ?? token;
+      await env.DB
+        .prepare('UPDATE subscriptions SET confirmation_token = ?, token_created_at = ?, updated_at = ? WHERE email = ?')
+        .bind(token, now, now, normalizedEmail)
+        .run();
+    } else {
+      await env.DB
+        .prepare(
+          'INSERT INTO subscriptions (email, created_at, confirmed, confirmation_token, token_created_at) VALUES (?, ?, 0, ?, ?)'
+        )
+        .bind(normalizedEmail, now, token, now)
+        .run();
+    }
+
+    const confirmationLink = buildConfirmationLink(request.url, env.SITE_BASE_URL, normalizedEmail, token);
+
+    ctx.waitUntil(
+      sendConfirmationEmail(env, normalizedEmail, confirmationLink, log).catch((error) => {
+        log('Failed to send confirmation email', error);
+      })
+    );
+
+    return jsonResponse(
+      {
+        success: true,
+        message: 'Confirmation email sent. Please check your inbox.',
+      },
+      202
+    );
+  } catch (error) {
+    log('Subscription handler failed', error);
+    return jsonResponse({ success: false, error: 'Internal Server Error' }, 500);
+  }
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
     const log = getLogger(ctx);
 
-    try {
-      const payload = await parseJson(request, log);
-      if (!payload) {
-        return jsonResponse({ success: false, error: 'Invalid JSON body.' }, 400);
-      }
-
-      const { email } = payload;
-      if (typeof email !== 'string' || !isValidEmail(email)) {
-        return jsonResponse({ success: false, error: 'A valid email address is required.' }, 400);
-      }
-
-      const normalizedEmail = email.trim().toLowerCase();
-      if (!normalizedEmail) {
-        return jsonResponse({ success: false, error: 'A valid email address is required.' }, 400);
-      }
-
-      await ensureSchema(env.DB);
-
-      const existing = await env.DB
-  .prepare('SELECT email FROM subscriptions WHERE email = ?')
-  .bind(normalizedEmail)
-  .first();
-
-if (existing) {
-  return jsonResponse(
-    { success: false, error: 'This email is already subscribed.' },
-    400
-  );
-}
-
-await env.DB
-  .prepare('INSERT INTO subscriptions (email, created_at) VALUES (?, ?)')
-  .bind(normalizedEmail, new Date().toISOString())
-  .run();
-
-return jsonResponse(
-  { success: true, message: 'Thanks for subscribing!' },
-  200
-);
-
-      const now = new Date().toISOString();
-      let token = crypto.randomUUID();
-
-      if (existing) {
-        if (existing.confirmed) {
-          return jsonResponse({ success: true, message: 'Email is already confirmed.' }, 200);
-        }
-
-        token = existing.confirmation_token ?? token;
-        await env.DB
-          .prepare(
-            'UPDATE subscriptions SET confirmation_token = ?, token_created_at = ?, updated_at = ? WHERE email = ?'
-          )
-          .bind(token, now, now, normalizedEmail)
-          .run();
-      } else {
-        await env.DB
-          .prepare(
-            'INSERT INTO subscriptions (email, created_at, confirmed, confirmation_token, token_created_at) VALUES (?, ?, 0, ?, ?)'
-          )
-          .bind(normalizedEmail, now, token, now)
-          .run();
-      }
-
-      const confirmationLink = buildConfirmationLink(request.url, env.SITE_BASE_URL, normalizedEmail, token);
-
-      ctx.waitUntil(
-        sendConfirmationEmail(env, normalizedEmail, confirmationLink, log).catch((error) => {
-          log('Failed to send confirmation email', error);
-        })
-      );
-
-      return jsonResponse(
-        {
-          success: true,
-          message: 'Confirmation email sent. Please check your inbox.',
-        },
-        202
-      );
-    } catch (error) {
-      log('Subscription handler failed', error);
-      return jsonResponse({ success: false, error: 'Internal Server Error' }, 500);
+    if (url.pathname === '/confirm') {
+      return handleConfirmation(request, env, log);
     }
+
+    if (url.pathname === '/api/profile') {
+      return handleProfile(request, env, log);
+    }
+
+    if (url.pathname === '/api/check') {
+      if (request.method !== 'POST') {
+        return new Response('Method Not Allowed', {
+          status: 405,
+          headers: { ...CORS_HEADERS, Allow: 'POST,OPTIONS' },
+        });
+      }
+
+      return handleSubscriptionCheck(request, env, log);
+    }
+
+    if (url.pathname === '/api/subscribe') {
+      if (request.method !== 'POST') {
+        return new Response('Method Not Allowed', {
+          status: 405,
+          headers: { ...CORS_HEADERS, Allow: 'POST,OPTIONS' },
+        });
+      }
+
+      return handleSubscribe(request, env, ctx, log);
+    }
+
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+
+    return new Response('Not Found', { status: 404 });
   },
 };
