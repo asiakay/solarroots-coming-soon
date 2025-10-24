@@ -336,8 +336,6 @@ if (url.pathname === '/api/check' && request.method === 'POST') {
     200
   );
 }
-
-
     
 
     if (url.pathname !== '/api/subscribe') {
@@ -347,6 +345,47 @@ if (url.pathname === '/api/check' && request.method === 'POST') {
 
       return new Response('Not Found', { status: 404 });
     }
+
+if (url.pathname === '/api/profile' && request.method === 'POST') {
+  const log = getLogger(ctx);
+  const payload = await parseJson(request, log);
+  if (!payload || typeof payload.email !== 'string') {
+    return jsonResponse({ success: false, error: 'Invalid request.' }, 400);
+  }
+
+  const email = payload.email.trim().toLowerCase();
+  const name = typeof payload.name === 'string' ? payload.name.trim() : null;
+  const bio = typeof payload.bio === 'string' ? payload.bio.trim() : null;
+
+  if (!isValidEmail(email)) {
+    return jsonResponse({ success: false, error: 'Invalid email address.' }, 400);
+  }
+
+  await ensureSchema(env.DB);
+  const existing = await env.DB
+    .prepare('SELECT email FROM subscriptions WHERE email = ?')
+    .bind(email)
+    .first();
+
+  if (!existing) {
+    return jsonResponse({ success: false, error: 'Email not found in subscriptions.' }, 404);
+  }
+
+  const now = new Date().toISOString();
+
+  await env.DB
+    .prepare(
+      'INSERT INTO profiles (email, name, bio, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ' +
+      'ON CONFLICT(email) DO UPDATE SET name = excluded.name, bio = excluded.bio, updated_at = excluded.updated_at;'
+    )
+    .bind(email, name, bio, now, now)
+    .run();
+
+  return jsonResponse({ success: true, message: 'Profile saved successfully.' }, 200);
+}
+
+
+    
 
     if (request.method !== 'POST') {
       return new Response('Method Not Allowed', {
