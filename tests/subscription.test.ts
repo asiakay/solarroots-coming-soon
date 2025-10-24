@@ -251,3 +251,75 @@ describe('subscribe handler', () => {
     expect(waitUntilCalls.length).toBe(0);
   });
 });
+
+describe('confirmation handler', () => {
+  it('confirms a subscription when the token matches', async () => {
+    const existing: SubscriptionRecord = {
+      email: 'user@example.com',
+      confirmed: 0,
+      confirmation_token: 'valid-token',
+    };
+
+    const db = new MockD1Database(existing);
+
+    const request = new Request('https://landing.example/confirm?email=user@example.com&token=valid-token', {
+      method: 'GET',
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain('Your email has been confirmed');
+
+    expect(db.operations.length).toBe(3);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[2].query.startsWith('UPDATE')).toBe(true);
+
+    expect(db.updatedRow).not.toBeNull();
+    if (db.updatedRow) {
+      const [updatedAt, email] = db.updatedRow;
+      expect(typeof updatedAt).toBe('string');
+      expect(Number.isNaN(Date.parse(updatedAt as string))).toBe(false);
+      expect(email).toBe('user@example.com');
+    }
+  });
+
+  it('rejects confirmation when the token is invalid', async () => {
+    const existing: SubscriptionRecord = {
+      email: 'user@example.com',
+      confirmed: 0,
+      confirmation_token: 'valid-token',
+    };
+
+    const db = new MockD1Database(existing);
+
+    const request = new Request('https://landing.example/confirm?email=user@example.com&token=other-token', {
+      method: 'GET',
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(body).toContain('confirmation link is no longer valid');
+
+    expect(db.operations.length).toBe(2);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('SELECT')).toBe(true);
+    expect(db.updatedRow).toBeNull();
+  });
+});

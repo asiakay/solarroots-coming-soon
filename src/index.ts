@@ -35,6 +35,10 @@ const JSON_HEADERS: Record<string, string> = {
   'content-type': 'application/json',
 };
 
+const HTML_HEADERS: Record<string, string> = {
+  'content-type': 'text/html; charset=utf-8',
+};
+
 const CORS_HEADERS: Record<string, string> = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'POST,OPTIONS',
@@ -91,6 +95,142 @@ function buildConfirmationLink(
   url.searchParams.set('token', token);
   url.searchParams.set('email', email);
   return url.toString();
+}
+
+function htmlResponse(title: string, message: string, status: 'success' | 'error' | 'info' = 'info'): Response {
+  const accent =
+    status === 'success' ? '#e7ffad' : status === 'error' ? '#ffdfdf' : 'rgba(255, 255, 255, 0.85)';
+
+  const body = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background-color: #2e5e4e;
+        color: #ffffff;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 1.5rem;
+        background: linear-gradient(to bottom right, rgba(46, 94, 78, 0.95), rgba(255, 216, 91, 0.85));
+        color: #ffffff;
+        text-align: center;
+      }
+
+      main {
+        width: min(420px, 100%);
+        display: grid;
+        gap: 1.5rem;
+        padding: 2.5rem 2rem;
+        border-radius: 18px;
+        background: rgba(0, 0, 0, 0.28);
+        box-shadow: 0 25px 40px -20px rgba(0, 0, 0, 0.4);
+      }
+
+      h1 {
+        font-size: clamp(1.75rem, 3vw + 1rem, 2.5rem);
+        margin: 0;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.6;
+        font-size: 1rem;
+        color: ${accent};
+        font-weight: 600;
+      }
+
+      .logo {
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.8);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="logo">Solar Roots</div>
+      <h1>${title}</h1>
+      <p>${message}</p>
+    </main>
+  </body>
+</html>`;
+
+  return new Response(body, {
+    status: status === 'error' ? 400 : 200,
+    headers: HTML_HEADERS,
+  });
+}
+
+async function handleConfirmation(
+  request: Request,
+  env: Env,
+  log: (...args: unknown[]) => void
+): Promise<Response> {
+  if (request.method !== 'GET') {
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: { ...HTML_HEADERS, Allow: 'GET' },
+    });
+  }
+
+  const url = new URL(request.url);
+  const token = url.searchParams.get('token');
+  const email = url.searchParams.get('email');
+
+  if (!token || !email) {
+    return htmlResponse('Confirmation Failed', 'The confirmation link is missing required information.', 'error');
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return htmlResponse('Confirmation Failed', 'The confirmation link is missing required information.', 'error');
+  }
+
+  try {
+    await ensureSchema(env.DB);
+
+    const existing = await env.DB
+      .prepare('SELECT email, confirmed, confirmation_token FROM subscriptions WHERE email = ?')
+      .bind(normalizedEmail)
+      .first<SubscriptionRecord>();
+
+    if (!existing) {
+      return htmlResponse('Confirmation Failed', 'We could not find a subscription for this email address.', 'error');
+    }
+
+    if (existing.confirmed) {
+      return htmlResponse('You’re already confirmed!', 'Thanks for being part of Solar Roots. We will keep you posted.', 'success');
+    }
+
+    if (!existing.confirmation_token || existing.confirmation_token !== token) {
+      return htmlResponse('Confirmation Failed', 'This confirmation link is no longer valid. Please request a new one.', 'error');
+    }
+
+    const now = new Date().toISOString();
+    await env.DB
+      .prepare(
+        'UPDATE subscriptions SET confirmed = 1, confirmation_token = NULL, updated_at = ?, token_created_at = NULL WHERE email = ?'
+      )
+      .bind(now, normalizedEmail)
+      .run();
+
+    return htmlResponse('You’re all set!', 'Your email has been confirmed. Thanks for joining Solar Roots!', 'success');
+  } catch (error) {
+    log('Confirmation handler failed', error);
+    return htmlResponse('Confirmation Failed', 'Something went wrong on our end. Please try again later.', 'error');
+  }
 }
 
 async function sendConfirmationEmail(
@@ -210,6 +350,11 @@ export default {
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
+    if (url.pathname === '/confirm') {
+      const log = getLogger(ctx);
+      return handleConfirmation(request, env, log);
     }
 
     if (url.pathname !== '/api/subscribe') {
