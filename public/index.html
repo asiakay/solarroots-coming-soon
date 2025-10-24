@@ -123,6 +123,24 @@
       color: rgba(255, 255, 255, 0.75);
     }
 
+    .profile-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+      font-weight: 600;
+      color: #ffd85b;
+      text-decoration: none;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .profile-link:hover,
+    .profile-link:focus-visible {
+      transform: translateY(-1px);
+      opacity: 0.85;
+    }
+
     #form-message {
       min-height: 1.5rem;
       font-weight: 600;
@@ -161,6 +179,10 @@
       <p class="note">We respect your inbox. Expect only the important updates.</p>
       <p id="form-message" role="status" aria-live="polite"></p>
     </form>
+    <a class="profile-link" href="/signup.html" aria-label="Create your Solar Roots member profile">
+      Create your Solar Roots profile
+      <span aria-hidden="true">→</span>
+    </a>
   </main>
   <script src="script.js"></script>
 </body>
