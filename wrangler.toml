@@ -24,4 +24,4 @@ SITE_BASE_URL = "https://solarroots.example.com"
 [[d1_databases]]
 binding = "DB"
 database_name = "solarroots"
-database_id = "00000000-0000-0000-0000-000000000000" # replace with your D1 database UUID
+database_id = "cffadab4-34a6-42b4-ba7a-a01692dd3191" # replace with your D1 database UUID
