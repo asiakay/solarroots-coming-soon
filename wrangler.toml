@@ -19,8 +19,7 @@ invocation_logs = true
 
 
 [vars]
-SITE_BASE_URL = "https://solarroots.example.com"
-
+SITE_BASE_URL = "https://solar-roots-coming-soon.asialakaygrady-6d4.workers.dev"
 [[d1_databases]]
 binding = "DB"
 database_name = "solarroots"
