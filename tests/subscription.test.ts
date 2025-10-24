@@ -48,6 +48,7 @@ class MockD1Database implements D1Database {
   operations: OperationRecord[] = [];
   insertedRow: unknown[] | null = null;
   updatedRow: unknown[] | null = null;
+  profileInsertedRow: unknown[] | null = null;
   private selectResult: SubscriptionRecord | null;
 
   constructor(initialSelectResult: SubscriptionRecord | null = null) {
@@ -81,7 +82,11 @@ class MockD1Database implements D1Database {
     }
 
     if (normalizedQuery.startsWith('INSERT')) {
-      this.insertedRow = bindings;
+      if (normalizedQuery.includes('INTO PROFILES')) {
+        this.profileInsertedRow = bindings;
+      } else {
+        this.insertedRow = bindings;
+      }
       return Promise.resolve({} as T);
     }
 
@@ -173,10 +178,11 @@ describe('subscribe handler', () => {
       message: 'Confirmation email sent. Please check your inbox.',
     });
 
-    expect(db.operations.length).toBe(3);
+    expect(db.operations.length).toBe(4);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[2].query.startsWith('INSERT')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[3].query.startsWith('INSERT')).toBe(true);
 
     expect(db.insertedRow).not.toBeNull();
     if (db.insertedRow) {
@@ -242,9 +248,10 @@ describe('subscribe handler', () => {
       message: 'Email is already confirmed.',
     });
 
-    expect(db.operations.length).toBe(2);
+    expect(db.operations.length).toBe(3);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
     expect(db.insertedRow).toBeNull();
     expect(db.updatedRow).toBeNull();
     expect(fetchCalls.length).toBe(0);
@@ -278,10 +285,11 @@ describe('confirmation handler', () => {
     expect(response.status).toBe(200);
     expect(body).toContain('Your email has been confirmed');
 
-    expect(db.operations.length).toBe(3);
+    expect(db.operations.length).toBe(4);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[2].query.startsWith('UPDATE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[3].query.startsWith('UPDATE')).toBe(true);
 
     expect(db.updatedRow).not.toBeNull();
     if (db.updatedRow) {
@@ -317,9 +325,147 @@ describe('confirmation handler', () => {
     expect(response.status).toBe(400);
     expect(body).toContain('confirmation link is no longer valid');
 
-    expect(db.operations.length).toBe(2);
+    expect(db.operations.length).toBe(3);
     expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
     expect(db.updatedRow).toBeNull();
+  });
+});
+
+describe('profile handler', () => {
+  it('rejects requests with an invalid JSON body', async () => {
+    const db = new MockD1Database();
+
+    const request = new Request('https://example.com/api/profile', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(['invalid']),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: 'Invalid JSON body.' });
+    expect(db.operations.length).toBe(0);
+  });
+
+  it('requires a valid email address', async () => {
+    const db = new MockD1Database();
+
+    const request = new Request('https://example.com/api/profile', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email', name: 'Ada Lovelace', bio: 'First programmer.' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: 'Invalid email address.' });
+    expect(db.operations.length).toBe(0);
+  });
+
+  it('requires both name and bio fields', async () => {
+    const db = new MockD1Database();
+
+    const request = new Request('https://example.com/api/profile', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com', name: '', bio: '' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ success: false, error: 'Name is required.' });
+    expect(db.operations.length).toBe(0);
+  });
+
+  it('returns 404 when the email is not subscribed', async () => {
+    const db = new MockD1Database(null);
+
+    const request = new Request('https://example.com/api/profile', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com', name: 'Solar Fan', bio: 'Loves sunshine.' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({ success: false, error: 'Email not found in subscriptions.' });
+    expect(db.operations.length).toBe(3);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
+  });
+
+  it('creates or updates a profile for a subscribed user', async () => {
+    const existing: SubscriptionRecord = {
+      email: 'user@example.com',
+      confirmed: 1,
+      confirmation_token: null,
+    };
+    const db = new MockD1Database(existing);
+
+    const request = new Request('https://example.com/api/profile', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com', name: '  Solar Fan  ', bio: ' Harnessing sunlight. ' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ success: true, message: 'Profile saved successfully.' });
+    expect(db.operations.length).toBe(4);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.startsWith('SELECT')).toBe(true);
+    expect(db.operations[3].query.startsWith('INSERT')).toBe(true);
+
+    expect(db.profileInsertedRow).not.toBeNull();
+    if (db.profileInsertedRow) {
+      const [email, name, bio, createdAt, updatedAt] = db.profileInsertedRow;
+      expect(email).toBe('user@example.com');
+      expect(name).toBe('Solar Fan');
+      expect(bio).toBe('Harnessing sunlight.');
+      expect(typeof createdAt).toBe('string');
+      expect(typeof updatedAt).toBe('string');
+    }
   });
 });
