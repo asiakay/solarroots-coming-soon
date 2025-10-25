@@ -96,6 +96,22 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
+async function ensureColumn(
+  db: D1Database,
+  table: 'subscriptions' | 'profiles',
+  column: string,
+  definition: string
+): Promise<void> {
+  const existing = await db
+    .prepare(`SELECT name FROM pragma_table_info('${table}') WHERE name = ?`)
+    .bind(column)
+    .first<{ name: string }>();
+
+  if (!existing) {
+    await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  }
+}
+
 async function ensureSchema(db: D1Database): Promise<void> {
   await db
     .prepare(
@@ -109,13 +125,12 @@ async function ensureSchema(db: D1Database): Promise<void> {
     )
     .run();
 
-  const passwordColumn = await db
-    .prepare("SELECT name FROM pragma_table_info('profiles') WHERE name = 'password_hash'")
-    .first<{ name: string }>();
-
-  if (!passwordColumn) {
-    await db.prepare('ALTER TABLE profiles ADD COLUMN password_hash TEXT').run();
-  }
+  await ensureColumn(db, 'subscriptions', 'created_at', 'TEXT');
+  await ensureColumn(db, 'subscriptions', 'updated_at', 'TEXT');
+  await ensureColumn(db, 'subscriptions', 'confirmed', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureColumn(db, 'subscriptions', 'confirmation_token', 'TEXT');
+  await ensureColumn(db, 'subscriptions', 'token_created_at', 'TEXT');
+  await ensureColumn(db, 'profiles', 'password_hash', 'TEXT');
 }
 
 function buildConfirmationLink(
