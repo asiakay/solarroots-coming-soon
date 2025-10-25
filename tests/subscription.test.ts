@@ -49,9 +49,18 @@ class MockD1Database implements D1Database {
   insertedRow: unknown[] | null = null;
   updatedRow: unknown[] | null = null;
   profileInsertedRow: unknown[] | null = null;
+  alteredSubscriptionColumns: string[] = [];
   private subscriptionSelectResult: SubscriptionRecord | null;
   private profileSelectResult: { password_hash: string | null } | null = null;
   private passwordColumnExists = true;
+  private subscriptionColumns: Record<string, boolean> = {
+    email: true,
+    created_at: true,
+    updated_at: true,
+    confirmed: true,
+    confirmation_token: true,
+    token_created_at: true,
+  };
 
   constructor(initialSelectResult: SubscriptionRecord | null = null) {
     this.subscriptionSelectResult = initialSelectResult;
@@ -73,6 +82,10 @@ class MockD1Database implements D1Database {
     this.passwordColumnExists = value;
   }
 
+  setSubscriptionColumnExists(column: keyof MockD1Database['subscriptionColumns'], value: boolean): void {
+    this.subscriptionColumns[column] = value;
+  }
+
   handleFirst<T>(query: string, bindings: unknown[]): Promise<T | null> {
     this.operations.push({ query, bindings, kind: 'first' });
 
@@ -81,6 +94,15 @@ class MockD1Database implements D1Database {
     if (normalizedQuery.includes("PRAGMA_TABLE_INFO('PROFILES')")) {
       if (this.passwordColumnExists) {
         return Promise.resolve({ name: 'password_hash' } as unknown as T);
+      }
+
+      return Promise.resolve(null);
+    }
+
+    if (normalizedQuery.includes("PRAGMA_TABLE_INFO('SUBSCRIPTIONS')")) {
+      const column = typeof bindings[0] === 'string' ? bindings[0] : '';
+      if (column && this.subscriptionColumns[column as keyof typeof this.subscriptionColumns]) {
+        return Promise.resolve({ name: column } as unknown as T);
       }
 
       return Promise.resolve(null);
@@ -120,10 +142,22 @@ class MockD1Database implements D1Database {
     }
 
     if (normalizedQuery.startsWith('ALTER TABLE')) {
-      if (!this.passwordColumnExists) {
-        this.passwordColumnExists = true;
+      if (normalizedQuery.includes('PROFILES')) {
+        if (!this.passwordColumnExists) {
+          this.passwordColumnExists = true;
+        }
+        return Promise.resolve({} as T);
       }
-      return Promise.resolve({} as T);
+
+      if (normalizedQuery.includes('SUBSCRIPTIONS')) {
+        const match = query.match(/ADD COLUMN\s+([a-zA-Z_]+)/i);
+        if (match) {
+          const column = match[1] as keyof typeof this.subscriptionColumns;
+          this.subscriptionColumns[column] = true;
+          this.alteredSubscriptionColumns.push(column);
+        }
+        return Promise.resolve({} as T);
+      }
     }
 
     throw new Error(`Unexpected run() query: ${query}`);
@@ -217,12 +251,21 @@ describe('subscribe handler', () => {
       message: 'Confirmation email sent. Please check your inbox.',
     });
 
-    expect(db.operations.length).toBe(5);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[4].query.startsWith('INSERT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('SELECT'))).toBe(true);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(true);
+    expect(queries.some((query) => query.startsWith('ALTER TABLE SUBSCRIPTIONS'))).toBe(false);
 
     expect(db.insertedRow).not.toBeNull();
     if (db.insertedRow) {
@@ -246,6 +289,54 @@ describe('subscribe handler', () => {
     const confirmationLink = 'https://solarroots.example.com/confirm?token=test-token&email=test%40example.com';
     expect(requestBody.content[0].value).toContain(confirmationLink);
     expect(requestBody.content[1].value).toContain(confirmationLink);
+  });
+
+  it('adds missing subscription columns for legacy databases before querying', async () => {
+    const db = new MockD1Database(null);
+    db.setSubscriptionColumnExists('created_at', false);
+    db.setSubscriptionColumnExists('updated_at', false);
+    db.setSubscriptionColumnExists('confirmed', false);
+    db.setSubscriptionColumnExists('confirmation_token', false);
+    db.setSubscriptionColumnExists('token_created_at', false);
+
+    const fetchCalls: Array<[RequestInfo, RequestInit | undefined]> = [];
+    globalThis.fetch = (async (input: RequestInfo, init?: RequestInit) => {
+      fetchCalls.push([input, init]);
+      return new Response('', { status: 200 });
+    }) as typeof fetch;
+
+    const request = new Request('https://example.com/api/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'legacy@example.com' }),
+    });
+
+    const waitUntilCalls: Promise<unknown>[] = [];
+    const ctx: ExecutionContext = {
+      waitUntil(promise) {
+        waitUntilCalls.push(promise);
+      },
+    };
+
+    const env: Env = {
+      DB: db as unknown as D1Database,
+    };
+
+    const response = await worker.fetch(request, env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(body).toEqual({
+      success: true,
+      message: 'Confirmation email sent. Please check your inbox.',
+    });
+
+    expect(db.alteredSubscriptionColumns).toEqual(
+      expect.arrayContaining(['created_at', 'updated_at', 'confirmed', 'confirmation_token', 'token_created_at'])
+    );
+    expect(db.alteredSubscriptionColumns).toHaveLength(5);
+    expect(fetchCalls.length).toBe(1);
+    expect(waitUntilCalls.length).toBe(1);
   });
 
   it('acknowledges already-confirmed subscriptions without sending email', async () => {
@@ -288,11 +379,19 @@ describe('subscribe handler', () => {
       message: 'Email is already confirmed.',
     });
 
-    expect(db.operations.length).toBe(4);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('SELECT'))).toBe(true);
     expect(db.insertedRow).toBeNull();
     expect(db.updatedRow).toBeNull();
     expect(fetchCalls.length).toBe(0);
@@ -326,12 +425,20 @@ describe('confirmation handler', () => {
     expect(response.status).toBe(200);
     expect(body).toContain('Your email has been confirmed');
 
-    expect(db.operations.length).toBe(5);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[4].query.startsWith('UPDATE')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('SELECT'))).toBe(true);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(true);
 
     expect(db.updatedRow).not.toBeNull();
     if (db.updatedRow) {
@@ -367,11 +474,19 @@ describe('confirmation handler', () => {
     expect(response.status).toBe(400);
     expect(body).toContain('confirmation link is no longer valid');
 
-    expect(db.operations.length).toBe(4);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('SELECT'))).toBe(true);
     expect(db.updatedRow).toBeNull();
   });
 });
@@ -420,11 +535,22 @@ describe('subscription check handler', () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({ success: true, exists: false, message: 'This email is available.' });
 
-    expect(db.operations.length).toBe(4);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('SELECT'))).toBe(true);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('ALTER TABLE SUBSCRIPTIONS'))).toBe(false);
   });
 
   it('indicates when an email is already subscribed', async () => {
@@ -453,11 +579,22 @@ describe('subscription check handler', () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({ success: true, exists: true, message: 'This email is already subscribed.' });
 
-    expect(db.operations.length).toBe(4);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('SELECT'))).toBe(true);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('ALTER TABLE SUBSCRIPTIONS'))).toBe(false);
   });
 
   it('rejects non-POST methods', async () => {
@@ -575,11 +712,24 @@ describe('profile handler', () => {
 
     expect(response.status).toBe(404);
     expect(body).toEqual({ success: false, error: 'Email not found in subscriptions.' });
-    expect(db.operations.length).toBe(4);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+    const selectStatements = queries.filter(
+      (query) => query.startsWith('SELECT') && !query.toLowerCase().includes('pragma_table_info')
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(selectStatements).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(false);
   });
 
   it('requires a password when creating a new profile', async () => {
@@ -611,12 +761,24 @@ describe('profile handler', () => {
 
     expect(response.status).toBe(400);
     expect(body).toEqual({ success: false, error: 'Password is required to create a profile.' });
-    expect(db.operations.length).toBe(5);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[4].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+    const selectStatements = queries.filter(
+      (query) => query.startsWith('SELECT') && !query.toLowerCase().includes('pragma_table_info')
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(selectStatements).toHaveLength(2);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(false);
   });
 
   it('creates or updates a profile for a subscribed user', async () => {
@@ -649,13 +811,24 @@ describe('profile handler', () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual({ success: true, message: 'Profile saved successfully.' });
-    expect(db.operations.length).toBe(6);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[4].query.startsWith('SELECT')).toBe(true);
-    expect(db.operations[5].query.startsWith('INSERT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+    const selectStatements = queries.filter(
+      (query) => query.startsWith('SELECT') && !query.toLowerCase().includes('pragma_table_info')
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(selectStatements).toHaveLength(2);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(true);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(false);
 
     expect(db.profileInsertedRow).not.toBeNull();
     if (db.profileInsertedRow) {
@@ -703,11 +876,24 @@ describe('login handler', () => {
       success: false,
       error: 'We could not find an account with a password for that email. Please create or update your profile first.',
     });
-    expect(db.operations.length).toBe(4);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+    const selectStatements = queries.filter(
+      (query) => query.startsWith('SELECT') && !query.toLowerCase().includes('pragma_table_info')
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(selectStatements).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(false);
   });
 
   it('rejects incorrect passwords', async () => {
@@ -732,11 +918,24 @@ describe('login handler', () => {
 
     expect(response.status).toBe(401);
     expect(body).toEqual({ success: false, error: 'Incorrect password. Please try again.' });
-    expect(db.operations.length).toBe(4);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+    const selectStatements = queries.filter(
+      (query) => query.startsWith('SELECT') && !query.toLowerCase().includes('pragma_table_info')
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(selectStatements).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(false);
   });
 
   it('logs in successfully with the correct credentials', async () => {
@@ -761,10 +960,23 @@ describe('login handler', () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual({ success: true, message: 'Login successful.' });
-    expect(db.operations.length).toBe(4);
-    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
-    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
-    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+    const queries = db.operations.map((operation) => operation.query);
+    const createStatements = queries.filter((query) => query.startsWith('CREATE TABLE'));
+    const subscriptionPragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('subscriptions')")
+    );
+    const profilePragmas = queries.filter((query) =>
+      query.toLowerCase().includes("pragma_table_info('profiles')")
+    );
+    const selectStatements = queries.filter(
+      (query) => query.startsWith('SELECT') && !query.toLowerCase().includes('pragma_table_info')
+    );
+
+    expect(createStatements).toHaveLength(2);
+    expect(subscriptionPragmas).toHaveLength(5);
+    expect(profilePragmas).toHaveLength(1);
+    expect(selectStatements).toHaveLength(1);
+    expect(queries.some((query) => query.startsWith('INSERT'))).toBe(false);
+    expect(queries.some((query) => query.startsWith('UPDATE'))).toBe(false);
   });
 });
