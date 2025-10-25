@@ -69,6 +69,9 @@ if (form && message) {
 
       setMessage(data.message ?? 'Access granted. Redirecting to the admin dashboard…', 'success');
       form.reset();
+      setTimeout(() => {
+        window.location.href = '/dashboard.html';
+      }, 900);
     } catch (error) {
       console.error('Admin login request failed', error);
       setMessage('Something went wrong on our end. Please try again shortly.', 'error');
