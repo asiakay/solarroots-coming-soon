@@ -35,6 +35,7 @@
       justify-content: space-between;
       align-items: center;
       gap: 1.5rem;
+      flex-wrap: wrap;
     }
 
     .brand {
@@ -72,6 +73,7 @@
       border-radius: 999px;
       background: rgba(0, 0, 0, 0.18);
       transition: transform 0.2s ease, background 0.2s ease;
+      text-align: center;
     }
 
     .nav-link:hover,
@@ -173,20 +175,36 @@
       font-size: 0.9rem;
     }
 
-    @media (max-width: 640px) {
+    @media (max-width: 720px) {
       header {
-        flex-direction: column;
-        align-items: flex-start;
+        gap: 1.25rem;
+      }
+    }
+
+    @media (max-width: 560px) {
+      header {
+        padding: 1.75rem 1.25rem;
       }
 
-      .lede {
-        text-align: left;
+      .brand {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0.65rem;
       }
 
-      .section-header {
-        text-align: left;
+      .nav-link {
+        width: 100%;
+        max-width: 320px;
       }
 
+      main {
+        padding: 2rem 1.25rem 3rem;
+      }
+
+      .section-header,
+      .lede,
       h2 {
         text-align: left;
       }

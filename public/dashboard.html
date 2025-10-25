@@ -36,6 +36,7 @@
       justify-content: space-between;
       align-items: center;
       gap: 1rem;
+      flex-wrap: wrap;
     }
 
     .brand {
@@ -286,6 +287,7 @@
       background: rgba(255, 216, 91, 0.12);
       padding: 0.75rem 1rem;
       border-radius: 14px;
+      gap: 0.35rem;
     }
 
     .fund-row span {
@@ -293,12 +295,18 @@
       letter-spacing: 0.05em;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
+    .table-wrapper {
       background: rgba(0, 0, 0, 0.28);
       border-radius: 18px;
       overflow: hidden;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 520px;
     }
 
     thead {
@@ -329,14 +337,69 @@
     }
 
     @media (max-width: 720px) {
+      nav {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 600px) {
       header {
+        padding: 1.5rem 1.25rem 0;
+        gap: 1.25rem;
+      }
+
+      .brand {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0.65rem;
+      }
+
+      nav {
+        gap: 0.5rem;
+      }
+
+      nav a {
+        flex: 1 1 140px;
+        text-align: center;
+        min-width: 120px;
+      }
+
+      main {
+        padding: 2rem 1.25rem 3.25rem;
+      }
+
+      .impact-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .fund-row {
         flex-direction: column;
         align-items: flex-start;
       }
 
-      nav {
-        width: 100%;
-        justify-content: flex-start;
+      .fund-row span:last-child {
+        align-self: flex-end;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .slider-label {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.35rem;
+      }
+
+      input[type="range"] {
+        height: 12px;
+      }
+
+      input[type="range"]::-webkit-slider-thumb,
+      input[type="range"]::-moz-range-thumb {
+        width: 22px;
+        height: 22px;
       }
     }
   </style>
@@ -453,42 +516,44 @@
 
     <section aria-labelledby="baseline-table-heading">
       <h2 id="baseline-table-heading" style="font-size: clamp(1.4rem, 3vw, 2rem); margin-bottom: 1.25rem;">Scenario vs. baseline snapshot</h2>
-      <table aria-describedby="baseline-note">
-        <thead>
-          <tr>
-            <th scope="col">Indicator</th>
-            <th scope="col">Baseline pilot</th>
-            <th scope="col">Your scenario</th>
-            <th scope="col">Change</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">Annual energy (kWh)</th>
-            <td id="baseline-energy">—</td>
-            <td id="scenario-energy">—</td>
-            <td id="delta-energy">—</td>
-          </tr>
-          <tr>
-            <th scope="row">Hempcrete bales</th>
-            <td id="baseline-hempcrete">—</td>
-            <td id="scenario-hempcrete">—</td>
-            <td id="delta-hempcrete">—</td>
-          </tr>
-          <tr>
-            <th scope="row">Carbon credits</th>
-            <td id="baseline-carbon">—</td>
-            <td id="scenario-carbon">—</td>
-            <td id="delta-carbon">—</td>
-          </tr>
-          <tr>
-            <th scope="row">Grocery fund ($)</th>
-            <td id="baseline-reinvestment">—</td>
-            <td id="scenario-reinvestment">—</td>
-            <td id="delta-reinvestment">—</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-wrapper">
+        <table aria-describedby="baseline-note">
+          <thead>
+            <tr>
+              <th scope="col">Indicator</th>
+              <th scope="col">Baseline pilot</th>
+              <th scope="col">Your scenario</th>
+              <th scope="col">Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Annual energy (kWh)</th>
+              <td id="baseline-energy">—</td>
+              <td id="scenario-energy">—</td>
+              <td id="delta-energy">—</td>
+            </tr>
+            <tr>
+              <th scope="row">Hempcrete bales</th>
+              <td id="baseline-hempcrete">—</td>
+              <td id="scenario-hempcrete">—</td>
+              <td id="delta-hempcrete">—</td>
+            </tr>
+            <tr>
+              <th scope="row">Carbon credits</th>
+              <td id="baseline-carbon">—</td>
+              <td id="scenario-carbon">—</td>
+              <td id="delta-carbon">—</td>
+            </tr>
+            <tr>
+              <th scope="row">Grocery fund ($)</th>
+              <td id="baseline-reinvestment">—</td>
+              <td id="scenario-reinvestment">—</td>
+              <td id="delta-reinvestment">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <p id="baseline-note" style="margin-top: 1rem; font-size: 0.85rem; color: rgba(255, 255, 255, 0.7);">
         Baseline is anchored to an 8-block pilot with 100 member-owners and 180 panels feeding a 150 kW shared battery.
       </p>

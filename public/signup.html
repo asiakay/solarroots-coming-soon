@@ -26,7 +26,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 3rem 1.5rem;
+      padding: clamp(2.5rem, 8vw, 3.25rem) clamp(1.25rem, 6vw, 1.75rem);
       background: linear-gradient(to bottom right, rgba(46, 94, 78, 0.95), rgba(255, 216, 91, 0.85));
       color: #ffffff;
     }
@@ -117,6 +117,7 @@
       background: #2e5e4e;
       color: #ffd85b;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      width: 100%;
     }
 
     button[type="submit"]:hover,
@@ -144,6 +145,7 @@
       justify-content: center;
       gap: 1.5rem;
       font-weight: 600;
+      flex-wrap: wrap;
     }
 
     .nav-links a {
@@ -158,12 +160,14 @@
     }
 
     @media (max-width: 520px) {
-      body {
-        padding: 2.5rem 1.25rem;
-      }
-
       main {
         padding: 2rem 1.5rem;
+      }
+
+      .nav-links {
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
       }
     }
   </style>
