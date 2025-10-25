@@ -20,6 +20,9 @@ export interface Env {
   MAILCHANNELS_DOMAIN?: string;
   MAILCHANNELS_SUBDOMAIN?: string;
   SITE_BASE_URL?: string;
+  ADMIN_EMAIL?: string;
+  ADMIN_PASSWORD?: string;
+  ADMIN_PASSWORD_HASH?: string;
 }
 
 interface SubscriptionRecord {
@@ -518,6 +521,70 @@ async function handleLogin(
   }
 }
 
+async function handleAdminLogin(
+  request: Request,
+  env: Env,
+  log: (...args: unknown[]) => void
+): Promise<Response> {
+  if (request.method !== 'POST') {
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: { ...CORS_HEADERS, Allow: 'POST,OPTIONS' },
+    });
+  }
+
+  const payload = await parseJson(request, log);
+  if (!payload) {
+    return jsonResponse({ success: false, error: 'Invalid JSON body.' }, 400);
+  }
+
+  const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+  const password = typeof payload.password === 'string' ? payload.password : '';
+
+  if (!isValidEmail(email)) {
+    return jsonResponse({ success: false, error: 'Invalid email address.' }, 400);
+  }
+
+  if (!password) {
+    return jsonResponse({ success: false, error: 'Password is required.' }, 400);
+  }
+
+  const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
+  const adminPasswordHash = env.ADMIN_PASSWORD_HASH?.trim();
+  const adminPassword = env.ADMIN_PASSWORD ?? '';
+
+  if (!adminEmail || (!adminPassword && !adminPasswordHash)) {
+    log('Admin login attempted without configured credentials');
+    return jsonResponse(
+      {
+        success: false,
+        error: 'Admin access is not configured.',
+      },
+      503
+    );
+  }
+
+  if (email !== adminEmail) {
+    return jsonResponse({ success: false, error: 'Incorrect admin credentials.' }, 401);
+  }
+
+  try {
+    if (adminPasswordHash) {
+      const incomingHash = await hashPassword(password);
+      if (!timingSafeEqual(incomingHash, adminPasswordHash)) {
+        return jsonResponse({ success: false, error: 'Incorrect admin credentials.' }, 401);
+      }
+    } else if (!timingSafeEqual(password, adminPassword)) {
+      return jsonResponse({ success: false, error: 'Incorrect admin credentials.' }, 401);
+    }
+
+    return jsonResponse({ success: true, message: 'Admin login successful.' }, 200);
+  } catch (error) {
+    log('Admin login handler failed', error);
+    return jsonResponse({ success: false, error: 'Internal Server Error' }, 500);
+  }
+}
+
 async function handleSubscribe(
   request: Request,
   env: Env,
@@ -607,6 +674,10 @@ export default {
 
     if (url.pathname === '/api/login') {
       return handleLogin(request, env, log);
+    }
+
+    if (url.pathname === '/api/admin/login') {
+      return handleAdminLogin(request, env, log);
     }
 
     if (url.pathname === '/api/check') {
