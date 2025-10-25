@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Solar Roots | Coming Soon</title>
+  <title>Solar Roots | Nourish Your Neighborhood</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: light;
@@ -23,89 +23,170 @@
 
     body {
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 3rem 1.5rem;
-      background: linear-gradient(to bottom right, rgba(46, 94, 78, 0.95), rgba(255, 216, 91, 0.85));
+      background: radial-gradient(circle at top right, rgba(255, 216, 91, 0.35), transparent 45%),
+        linear-gradient(160deg, rgba(46, 94, 78, 0.96), rgba(46, 94, 78, 0.82));
       color: #ffffff;
-      text-align: center;
+      display: flex;
+      flex-direction: column;
     }
 
-    main {
-      width: min(480px, 100%);
+    header {
+      padding: 1.5rem 5vw;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .brand-mark {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: rgba(255, 216, 91, 0.18);
       display: grid;
-      gap: 1.75rem;
+      place-items: center;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #ffd85b;
     }
 
-    .logo {
-      width: 140px;
-      justify-self: center;
-      padding: 0.75rem 1.5rem;
-      border-radius: 999px;
-      background: rgba(0, 0, 0, 0.25);
+    .brand span {
       font-weight: 700;
-      letter-spacing: 0.2em;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
     }
 
-    h1 {
-      font-size: clamp(2rem, 3vw + 1rem, 3rem);
-      font-weight: 700;
-      line-height: 1.15;
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
     }
 
-    p {
-      font-size: 1.05rem;
-      line-height: 1.6;
+    nav a {
+      color: rgba(255, 255, 255, 0.82);
+      text-decoration: none;
+      font-weight: 600;
+      padding: 0.5rem 0.75rem;
+      border-radius: 999px;
+      transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+    }
+
+    nav a:hover,
+    nav a:focus-visible {
+      background: rgba(0, 0, 0, 0.18);
+      color: #ffd85b;
+      transform: translateY(-1px);
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      gap: clamp(3rem, 5vw, 5rem);
+      padding: clamp(2rem, 4vw, 4rem) 5vw 4rem;
+    }
+
+    .hero {
+      display: grid;
+      gap: clamp(1.5rem, 3vw, 2.75rem);
+      align-items: start;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .hero-copy {
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .eyebrow {
+      font-weight: 600;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.65);
+    }
+
+    h1 {
+      font-size: clamp(2.75rem, 5vw + 1rem, 4rem);
+      line-height: 1.08;
+    }
+
+    .lede {
+      font-size: clamp(1.1rem, 2vw, 1.35rem);
+      line-height: 1.7;
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    .hero-highlights {
+      display: grid;
+      gap: 1rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    .hero-card {
+      background: rgba(0, 0, 0, 0.28);
+      border-radius: 20px;
+      padding: 2rem;
+      display: grid;
+      gap: 1rem;
+      box-shadow: 0 25px 40px -28px rgba(0, 0, 0, 0.6);
+    }
+
+    .hero-card strong {
+      font-size: 1.1rem;
+      color: #ffd85b;
     }
 
     form {
       display: grid;
       gap: 1rem;
-      background: rgba(0, 0, 0, 0.28);
-      padding: 2rem 1.75rem;
-      border-radius: 18px;
-      box-shadow: 0 25px 40px -20px rgba(0, 0, 0, 0.4);
+    }
+
+    .input-row {
+      display: grid;
+      gap: 0.75rem;
     }
 
     label {
-      display: block;
       font-weight: 600;
       text-transform: uppercase;
+      letter-spacing: 0.22em;
       font-size: 0.75rem;
-      letter-spacing: 0.2em;
-      color: rgba(255, 255, 255, 0.8);
-      text-align: left;
-    }
-
-    .input-group {
-      display: grid;
-      gap: 0.5rem;
+      color: rgba(255, 255, 255, 0.72);
     }
 
     input[type="email"] {
-      padding: 0.85rem 1rem;
-      border-radius: 12px;
+      padding: 1rem 1.1rem;
+      border-radius: 14px;
       border: none;
-      background-color: rgba(255, 255, 255, 0.9);
-      color: #1f1f1f;
-      font-size: 1rem;
-      outline: none;
+      background: rgba(255, 255, 255, 0.92);
+      color: #2e5e4e;
+      font-size: 1.05rem;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      outline: none;
     }
 
     input[type="email"]:focus {
-      box-shadow: 0 0 0 3px rgba(255, 216, 91, 0.6);
+      box-shadow: 0 0 0 4px rgba(255, 216, 91, 0.55);
       transform: translateY(-1px);
     }
 
     button[type="submit"] {
-      padding: 0.9rem 1.5rem;
-      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      border-radius: 14px;
       border: none;
-      font-size: 1rem;
       font-weight: 700;
+      font-size: 1.05rem;
       cursor: pointer;
       background: #2e5e4e;
       color: #ffd85b;
@@ -115,40 +196,12 @@
     button[type="submit"]:hover,
     button[type="submit"]:focus-visible {
       transform: translateY(-1px);
-      box-shadow: 0 12px 24px -14px rgba(0, 0, 0, 0.55);
+      box-shadow: 0 18px 28px -22px rgba(0, 0, 0, 0.6);
     }
 
-    .note {
+    .form-footnote {
       font-size: 0.85rem;
-      color: rgba(255, 255, 255, 0.75);
-    }
-
-    .cta-links {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 0.75rem;
-      margin-top: 0.5rem;
-    }
-
-    .cta-link {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 0.65rem 1.25rem;
-      border-radius: 999px;
-      font-weight: 600;
-      color: #ffd85b;
-      text-decoration: none;
-      background: rgba(0, 0, 0, 0.25);
-      transition: transform 0.2s ease, opacity 0.2s ease;
-    }
-
-    .cta-link:hover,
-    .cta-link:focus-visible {
-      transform: translateY(-1px);
-      opacity: 0.85;
+      color: rgba(255, 255, 255, 0.7);
     }
 
     #form-message {
@@ -164,42 +217,267 @@
       color: #ffdfdf;
     }
 
-    @media (max-width: 480px) {
-      body {
-        padding: 2.5rem 1.25rem;
+    .cta-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.25rem;
+    }
+
+    .cta-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1.25rem;
+      border-radius: 999px;
+      font-weight: 600;
+      text-decoration: none;
+      color: #ffd85b;
+      background: rgba(0, 0, 0, 0.25);
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .cta-link:hover,
+    .cta-link:focus-visible {
+      transform: translateY(-1px);
+      opacity: 0.85;
+    }
+
+    .section-title {
+      font-size: clamp(1.9rem, 3vw + 1rem, 2.8rem);
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .features {
+      display: grid;
+      gap: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .feature-card {
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 18px;
+      padding: 1.75rem;
+      display: grid;
+      gap: 0.75rem;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 18px 32px -24px rgba(0, 0, 0, 0.65);
+    }
+
+    .feature-card h3 {
+      color: #ffd85b;
+      font-size: 1.3rem;
+    }
+
+    .impact-grid {
+      display: grid;
+      gap: 2rem;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      align-items: start;
+    }
+
+    .impact-card {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2rem;
+      border-radius: 22px;
+      display: grid;
+      gap: 1rem;
+      line-height: 1.7;
+    }
+
+    .impact-card strong {
+      font-size: 1.4rem;
+      color: #ffd85b;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .timeline-step {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 1.5rem;
+      border-radius: 18px;
+      display: grid;
+      gap: 0.5rem;
+      border-left: 4px solid #ffd85b;
+    }
+
+    .timeline-step h4 {
+      font-size: 1.2rem;
+      color: #ffd85b;
+    }
+
+    footer {
+      padding: 2rem 5vw 3rem;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 720px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
       }
 
-      form {
-        padding: 1.75rem 1.5rem;
+      .brand {
+        width: 100%;
+      }
+
+      nav {
+        width: 100%;
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 520px) {
+      header {
+        padding: 1.5rem clamp(1.5rem, 6vw, 2rem);
+      }
+
+      main {
+        padding: clamp(2rem, 6vw, 3rem) clamp(1.5rem, 6vw, 2.5rem) 3rem;
       }
     }
   </style>
 </head>
 <body>
+  <header>
+    <a class="brand" href="/" aria-label="Solar Roots landing page">
+      <span class="brand-mark">SR</span>
+      <span>Solar Roots</span>
+    </a>
+    <nav aria-label="Site">
+      <a href="#features">Our promise</a>
+      <a href="#impact">Impact</a>
+      <a href="#timeline">Launch plan</a>
+      <a href="/signup.html">Join the co-op</a>
+      <a href="/login.html">Member login</a>
+      <a href="/admin.html">Admin login</a>
+    </nav>
+  </header>
+
   <main>
-    <div class="logo">Solar Roots</div>
-    <h1>We&rsquo;re planting something big.</h1>
-    <p>Solar Roots Co-op — a solar-powered grocery for the people. Launching soon.</p>
-    <form id="subscribe" novalidate>
-      <div class="input-group">
-        <label for="email">Notify Me</label>
-        <input type="email" id="email" name="email" placeholder="you@example.com" required autocomplete="email">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Community powered groceries</p>
+        <h1>We’re planting a solar-powered food co-op for the people.</h1>
+        <p class="lede">
+          Solar Roots is transforming vacant rooftops into thriving gardens and micro-grids. Together we can nourish neighbors,
+          cut carbon, and keep every dollar circulating locally.
+        </p>
+        <div class="hero-highlights" role="list">
+          <div role="listitem">⚡ 100% renewable energy keeps produce cold without burning fossil fuels.</div>
+          <div role="listitem">🥬 Hydroponic grow walls mean fresh greens and herbs available all year long.</div>
+          <div role="listitem">🤝 Profits are shared across members, reinvesting in our neighborhoods.</div>
+        </div>
       </div>
-      <button type="submit">Join the Waitlist</button>
-      <p class="note">We respect your inbox. Expect only the important updates.</p>
-      <p id="form-message" role="status" aria-live="polite"></p>
-    </form>
-    <div class="cta-links" role="navigation" aria-label="Member actions">
-      <a class="cta-link" href="/signup.html" aria-label="Create your Solar Roots member profile">
-        Create your Solar Roots profile
-        <span aria-hidden="true">→</span>
-      </a>
-      <a class="cta-link" href="/login.html" aria-label="Log in to your Solar Roots account">
-        Member login
-        <span aria-hidden="true">→</span>
-      </a>
-    </div>
+
+      <div class="hero-card" aria-labelledby="waitlist-heading">
+        <div>
+          <h2 id="waitlist-heading">Get first dibs when we open</h2>
+          <p>Join the waitlist to receive launch updates, volunteer opportunities, and founding member perks.</p>
+        </div>
+        <form id="subscribe" novalidate>
+          <div class="input-row">
+            <label for="email">Email address</label>
+            <input type="email" id="email" name="email" placeholder="you@example.com" required autocomplete="email">
+          </div>
+          <button type="submit">Join the waitlist</button>
+          <p class="form-footnote">We respect your inbox and only send the essentials.</p>
+          <p id="form-message" role="status" aria-live="polite"></p>
+        </form>
+        <div class="cta-links" role="navigation" aria-label="Member actions">
+          <a class="cta-link" href="/signup.html">Create your Solar Roots profile <span aria-hidden="true">→</span></a>
+          <a class="cta-link" href="/login.html">Member login <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" aria-labelledby="features-heading">
+      <h2 class="section-title" id="features-heading">Why Solar Roots?</h2>
+      <div class="features">
+        <article class="feature-card">
+          <h3>Clean energy, cold storage</h3>
+          <p>
+            Rooftop solar arrays power our refrigeration and lights, storing extra energy for cloudy days. Your produce stays crisp and
+            emissions stay low.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Member-led marketplace</h3>
+          <p>
+            Every member gets a vote in what we stock, what we grow, and which local makers join the shelves. We’re building a food
+            system that listens.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Education that empowers</h3>
+          <p>
+            Workshops teach everything from rooftop gardening to solar maintenance, creating green jobs and skills for the community.
+          </p>
+        </article>
+        <article class="feature-card">
+          <h3>Accessible for all</h3>
+          <p>
+            Sliding scale memberships and community credits ensure every neighbor can shop the co-op while supporting local growers.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="impact" aria-labelledby="impact-heading">
+      <h2 class="section-title" id="impact-heading">Growing more than groceries</h2>
+      <div class="impact-grid">
+        <article class="impact-card">
+          <strong>35%</strong>
+          <p>Projected savings on household produce bills for co-op members thanks to local sourcing and co-ownership.</p>
+        </article>
+        <article class="impact-card">
+          <strong>1.5 MW</strong>
+          <p>Community solar capacity planned across partner rooftops, enough to power the store and 120 nearby homes.</p>
+        </article>
+        <article class="impact-card">
+          <strong>200+</strong>
+          <p>Volunteer hours already pledged by neighbors excited to grow, teach, and deliver healthy food access.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="timeline" aria-labelledby="timeline-heading">
+      <h2 class="section-title" id="timeline-heading">Our launch plan</h2>
+      <div class="timeline" role="list">
+        <article class="timeline-step" role="listitem">
+          <h4>Spring 2024 · Site build-out</h4>
+          <p>Install solar arrays, energy storage, and vertical farms across our flagship warehouse.</p>
+        </article>
+        <article class="timeline-step" role="listitem">
+          <h4>Summer 2024 · Member beta</h4>
+          <p>Founding members test the co-op, refine the offerings, and grow our local supplier network.</p>
+        </article>
+        <article class="timeline-step" role="listitem">
+          <h4>Fall 2024 · Grand opening</h4>
+          <p>Doors open to the public with a celebratory market, live demos, and community power tours.</p>
+        </article>
+      </div>
+    </section>
   </main>
-  <script src="script.js"></script>
+
+  <footer>
+    © <span id="year"></span> Solar Roots Cooperative · Powered by neighbors, sunshine, and shared abundance.
+  </footer>
+
+  <script>
+    const yearTarget = document.getElementById('year');
+    if (yearTarget) {
+      yearTarget.textContent = new Date().getFullYear().toString();
+    }
+  </script>
+  <script src="script.js" type="module"></script>
 </body>
 </html>
