@@ -36,6 +36,7 @@
       justify-content: space-between;
       align-items: center;
       gap: 1rem;
+      flex-wrap: wrap;
     }
 
     .brand {
@@ -73,6 +74,7 @@
       border-radius: 999px;
       background: rgba(0, 0, 0, 0.18);
       transition: transform 0.2s ease, background 0.2s ease;
+      text-align: center;
     }
 
     .nav-link:hover,
@@ -186,6 +188,7 @@
       background: #ffd85b;
       color: #2e5e4e;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      width: 100%;
     }
 
     button[type="submit"]:hover,
@@ -262,10 +265,8 @@
       font-size: 0.9rem;
     }
 
-    @media (max-width: 640px) {
+    @media (max-width: 768px) {
       header {
-        flex-direction: column;
-        align-items: flex-start;
         gap: 1.25rem;
       }
 
@@ -275,6 +276,53 @@
 
       .hero-actions {
         grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 520px) {
+      body {
+        padding-bottom: 2rem;
+      }
+
+      header {
+        padding: 1.5rem 1.25rem 0;
+      }
+
+      .brand {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        justify-content: flex-start;
+      }
+
+      .nav-link {
+        width: 100%;
+        max-width: 320px;
+      }
+
+      main {
+        padding: 2rem 1.25rem 3rem;
+      }
+
+      .hero {
+        border-radius: 20px;
+        padding: 1.85rem 1.5rem;
+        gap: 1.75rem;
+      }
+
+      .hero-header {
+        gap: 0.85rem;
+      }
+
+      .hero-form {
+        padding: 1.5rem;
+      }
+
+      .primary-link,
+      .secondary-link {
+        justify-content: center;
+        width: 100%;
       }
     }
   </style>
