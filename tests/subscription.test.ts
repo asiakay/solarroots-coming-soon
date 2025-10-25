@@ -376,6 +376,112 @@ describe('confirmation handler', () => {
   });
 });
 
+describe('subscription check handler', () => {
+  it('rejects requests with missing email', async () => {
+    const db = new MockD1Database();
+
+    const request = new Request('https://example.com/api/check', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: 'Invalid request.' });
+    expect(db.operations.length).toBe(0);
+  });
+
+  it('indicates when an email has not subscribed yet', async () => {
+    const db = new MockD1Database(null);
+
+    const request = new Request('https://example.com/api/check', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'NewUser@example.com' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ success: true, exists: false, message: 'This email is available.' });
+
+    expect(db.operations.length).toBe(4);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+  });
+
+  it('indicates when an email is already subscribed', async () => {
+    const existing: SubscriptionRecord = {
+      email: 'user@example.com',
+      confirmed: 1,
+      confirmation_token: null,
+    };
+    const db = new MockD1Database(existing);
+
+    const request = new Request('https://example.com/api/check', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ success: true, exists: true, message: 'This email is already subscribed.' });
+
+    expect(db.operations.length).toBe(4);
+    expect(db.operations[0].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[1].query.startsWith('CREATE TABLE')).toBe(true);
+    expect(db.operations[2].query.toLowerCase()).toContain('pragma_table_info');
+    expect(db.operations[3].query.startsWith('SELECT')).toBe(true);
+  });
+
+  it('rejects non-POST methods', async () => {
+    const db = new MockD1Database();
+
+    const request = new Request('https://example.com/api/check', {
+      method: 'GET',
+    });
+
+    const ctx: ExecutionContext = {
+      waitUntil() {
+        // no-op for tests
+      },
+    };
+
+    const response = await worker.fetch(request, { DB: db } as Env, ctx);
+
+    expect(response.status).toBe(405);
+    expect(await response.text()).toBe('Method Not Allowed');
+    expect(response.headers.get('allow')).toBe('POST,OPTIONS');
+    expect(db.operations.length).toBe(0);
+  });
+});
+
 describe('profile handler', () => {
   it('rejects requests with an invalid JSON body', async () => {
     const db = new MockD1Database();
