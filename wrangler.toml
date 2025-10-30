@@ -6,6 +6,9 @@ compatibility_date = "2024-05-01"
 directory = "public"
 binding = "ASSETS"
 
+[[routes]]
+pattern = "solarroot.org"
+custom_domain = true
 
 [observability]
 enabled = false
