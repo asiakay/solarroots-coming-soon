@@ -1,4 +1,4 @@
-name = "solarroots-coming-soon"
+name = "solar-roots-coming-soon"
 main = "src/index.ts"
 compatibility_date = "2024-05-01"
 
