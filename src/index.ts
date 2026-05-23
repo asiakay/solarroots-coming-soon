@@ -664,6 +664,11 @@ export default {
 
     const log = getLogger(ctx);
 
+    if (url.hostname === 'ready.solarroot.org' && url.pathname === '/') {
+      const assetReq = new Request(new URL('/ready.html', request.url), request);
+      if (env.ASSETS) return env.ASSETS.fetch(assetReq);
+    }
+
     if (url.pathname === '/confirm') {
       return handleConfirmation(request, env, log);
     }
