@@ -10,6 +10,10 @@ binding = "ASSETS"
 pattern = "solarroot.org"
 custom_domain = true
 
+[[routes]]
+pattern = "ready.solarroot.org"
+custom_domain = true
+
 [observability]
 enabled = false
 head_sampling_rate = 1
