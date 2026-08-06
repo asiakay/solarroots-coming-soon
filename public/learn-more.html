@@ -168,6 +168,44 @@
       border-left: 4px solid #ffd85b;
     }
 
+    .about-card {
+      background: rgba(0, 0, 0, 0.22);
+      border-radius: 20px;
+      padding: clamp(1.5rem, 4vw, 2rem);
+      display: grid;
+      gap: 1.25rem;
+      box-shadow: 0 24px 40px -28px rgba(0, 0, 0, 0.65);
+    }
+
+    .about-card p {
+      font-size: 1rem;
+    }
+
+    .about-meta {
+      display: grid;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+      color: rgba(255, 255, 255, 0.86);
+    }
+
+    .about-meta dt {
+      font-weight: 700;
+      color: #ffd85b;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      margin-top: 0.75rem;
+    }
+
+    .about-meta dt:first-child {
+      margin-top: 0;
+    }
+
+    .about-meta dd {
+      margin: 0;
+      line-height: 1.6;
+    }
+
     footer {
       padding: 2rem 5vw 3rem;
       text-align: center;
@@ -307,6 +345,31 @@
           <h4>Fall 2026 · Grand opening</h4>
           <p>Doors open to the public with a celebratory market, live demos, and community power tours.</p>
         </article>
+      </div>
+    </section>
+    <section aria-labelledby="about-heading">
+      <div class="section-header">
+        <span>Who we are</span>
+        <h2 id="about-heading">About the Co-op</h2>
+      </div>
+      <div class="about-card">
+        <p>
+          Solar Roots Cooperative is a community solar and food-access cooperative based in Jamaica Plain, Boston, MA.
+          We are not affiliated with Solar Roots (a California-based 501(c)(3)), Boston Community Solar Cooperative,
+          or SolarRoots LLC — separate organizations with similar names.
+        </p>
+        <dl class="about-meta">
+          <dt>EIN</dt>
+          <dd>[insert EIN]</dd>
+          <dt>Status</dt>
+          <dd>Cooperative in formation</dd>
+          <dt>Board</dt>
+          <dd>
+            [Name], [Role]<br>
+            [Name], [Role]<br>
+            [Name], [Role]
+          </dd>
+        </dl>
       </div>
     </section>
   </main>
